@@ -19,11 +19,11 @@ The Flutter GPU API is highly experimental and subject to change. This implement
 ## Running with GPU
 
 ```bash
-# Enable Impeller (required for Flutter GPU)
-flutter run --enable-impeller
+# Enable Flutter GPU
+flutter run --enable-flutter-gpu
 
 # For better debugging
-flutter run --enable-impeller --verbose
+flutter run --enable-flutter-gpu --verbose
 ```
 
 ## API Usage Examples

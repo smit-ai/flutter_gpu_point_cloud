@@ -16,7 +16,7 @@ A Flutter application that parses and renders PLY point cloud files using Flutte
 
 - Flutter SDK master channel (managed via FVM)
 - Dart SDK
-- Run with `--enable-impeller` flag for GPU support
+- Run with `--enable-flutter-gpu` flag for GPU support
 
 ## Setup
 
@@ -53,10 +53,10 @@ fvm flutter pub run build_runner build
 1. Run the application with GPU support:
 ```bash
 # With Flutter GPU enabled
-fvm flutter run --enable-impeller
+fvm flutter run --enable-flutter-gpu
 
 # Or without FVM
-flutter run --enable-impeller
+flutter run --enable-flutter-gpu
 ```
 
 2. Click "Load PLY File" to select a point cloud file

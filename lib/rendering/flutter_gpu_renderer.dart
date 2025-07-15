@@ -27,7 +27,7 @@ class FlutterGpuPointCloudRenderer {
     _gpuContext = gpu.gpuContext;
     
     if (_gpuContext == null) {
-      throw Exception('GPU context not available. Make sure to run with --enable-impeller flag.');
+      throw Exception('GPU context not available. Make sure to run with --enable-flutter-gpu flag.');
     }
     
     try {

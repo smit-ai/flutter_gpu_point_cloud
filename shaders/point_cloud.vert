@@ -1,9 +1,12 @@
+// Copyright 2024 Flutter Point Cloud Viewer Contributors
 #version 460 core
+
+#include <flutter/runtime_effect.glsl>
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec4 color;
 
-layout(binding = 0) uniform Uniforms {
+layout(set = 0, binding = 0) uniform Uniforms {
     mat4 viewProjection;
     mat4 projection;
 } uniforms;

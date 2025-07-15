@@ -1,4 +1,7 @@
+// Copyright 2024 Flutter Point Cloud Viewer Contributors
 #version 460 core
+
+#include <flutter/runtime_effect.glsl>
 
 in vec4 fragColor;
 

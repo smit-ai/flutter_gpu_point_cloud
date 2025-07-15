@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'models/ply_data.dart';
 import 'parsers/ply_parser.dart';
 import 'widgets/point_cloud_viewer.dart';
+import 'widgets/gpu_point_cloud_viewer.dart';
 
 void main() {
   runApp(const MyApp());
@@ -37,6 +38,7 @@ class _PointCloudViewerPageState extends State<PointCloudViewerPage> {
   String? _fileName;
   String? _errorMessage;
   int? _pointCount;
+  bool _useGpuRenderer = true;
 
   Future<void> _pickAndLoadFile() async {
     setState(() {
@@ -97,7 +99,9 @@ class _PointCloudViewerPageState extends State<PointCloudViewerPage> {
       ),
       body: Stack(
         children: [
-          PointCloudViewer(plyData: _plyData),
+          _useGpuRenderer
+              ? GpuPointCloudViewer(plyData: _plyData)
+              : PointCloudViewer(plyData: _plyData),
           if (_isLoading)
             Container(
               color: Colors.black54,
@@ -153,6 +157,37 @@ class _PointCloudViewerPageState extends State<PointCloudViewerPage> {
                         SizedBox(height: 4),
                         Text('• Drag: Rotate camera'),
                         Text('• Scroll/Pinch: Zoom'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text('Renderer: '),
+                        ChoiceChip(
+                          label: const Text('GPU'),
+                          selected: _useGpuRenderer,
+                          onSelected: (selected) {
+                            setState(() {
+                              _useGpuRenderer = true;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Canvas'),
+                          selected: !_useGpuRenderer,
+                          onSelected: (selected) {
+                            setState(() {
+                              _useGpuRenderer = false;
+                            });
+                          },
+                        ),
                       ],
                     ),
                   ),

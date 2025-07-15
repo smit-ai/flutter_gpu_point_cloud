@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_gpu:
+    sdk: flutter
   freezed_annotation: ^2.4.1
   json_annotation: ^4.8.1
   file_picker: ^6.1.1
@@ -26,3 +28,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/shaders/
+  shaders:
+    - shaders/point_cloud.vert
+    - shaders/point_cloud.frag

@@ -1,0 +1,10 @@
+#!/bin/bash
+# Convenience wrapper for FVM Flutter commands
+
+if ! command -v fvm &> /dev/null; then
+    echo "FVM is not installed. Please install it with:"
+    echo "  dart pub global activate fvm"
+    exit 1
+fi
+
+fvm flutter "$@"

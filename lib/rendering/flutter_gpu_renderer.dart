@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_gpu/gpu.dart' as gpu;
 import 'package:vector_math/vector_math_64.dart' hide Colors;
@@ -8,8 +7,12 @@ import '../models/ply_data.dart';
 
 class FlutterGpuPointCloudRenderer {
   gpu.GpuContext? _gpuContext;
-  List<Vector3> _positions = [];
-  List<Color> _colors = [];
+  gpu.RenderPipeline? _pipeline;
+  gpu.DeviceBuffer? _vertexBuffer;
+  gpu.DeviceBuffer? _uniformBuffer;
+  gpu.Shader? _vertexShader;
+  gpu.Shader? _fragmentShader;
+  
   int _vertexCount = 0;
   
   Matrix4 _viewMatrix = Matrix4.identity();
@@ -19,72 +22,145 @@ class FlutterGpuPointCloudRenderer {
   double _cameraRotationX = 0.0;
   double _cameraRotationY = 0.0;
   
-  Vector3 _boundingBoxMin = Vector3.zero();
-  Vector3 _boundingBoxMax = Vector3.zero();
   Vector3 _boundingBoxCenter = Vector3.zero();
   
   Future<void> initialize() async {
     _gpuContext = gpu.gpuContext;
     
     if (_gpuContext == null) {
-      throw Exception('GPU context not available. Make sure Flutter GPU is enabled with --enable-impeller flag.');
+      throw Exception('GPU context not available. Make sure to run with --enable-impeller flag.');
     }
+    
+    await _loadShaders();
+    await _createPipeline();
+    await _createUniformBuffer();
+  }
+  
+  Future<void> _loadShaders() async {
+    // Inline shader source for experimental purposes
+    const vertexShaderSource = '''
+#version 320 es
+
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec4 color;
+
+layout(binding = 0) uniform UniformBuffer {
+    mat4 viewProjection;
+} uniforms;
+
+out vec4 fragColor;
+
+void main() {
+    gl_Position = uniforms.viewProjection * vec4(position, 1.0);
+    gl_PointSize = 3.0;
+    fragColor = color;
+}
+''';
+
+    const fragmentShaderSource = '''
+#version 320 es
+precision mediump float;
+
+in vec4 fragColor;
+out vec4 outColor;
+
+void main() {
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    
+    if (dist > 0.5) {
+        discard;
+    }
+    
+    float alpha = 1.0 - smoothstep(0.4, 0.5, dist);
+    outColor = vec4(fragColor.rgb, fragColor.a * alpha);
+}
+''';
+
+    // Create shader library from source
+    final vertexLibrary = _gpuContext!.createShaderLibrary(vertexShaderSource);
+    final fragmentLibrary = _gpuContext!.createShaderLibrary(fragmentShaderSource);
+    
+    _vertexShader = vertexLibrary!['main'];
+    _fragmentShader = fragmentLibrary!['main'];
+    
+    if (_vertexShader == null || _fragmentShader == null) {
+      throw Exception('Failed to load shaders');
+    }
+  }
+  
+  Future<void> _createPipeline() async {
+    _pipeline = _gpuContext!.createRenderPipeline(_vertexShader!, _fragmentShader!);
+  }
+  
+  Future<void> _createUniformBuffer() async {
+    // Create uniform buffer for view-projection matrix
+    final uniformData = Float32List(16); // 1 4x4 matrix
+    _uniformBuffer = _gpuContext!.createDeviceBuffer(
+      gpu.StorageMode.hostVisible,
+      uniformData.lengthInBytes,
+    );
   }
   
   void loadPointCloud(PlyData plyData) {
     _vertexCount = plyData.vertices.length;
-    _positions.clear();
-    _colors.clear();
     
-    for (final vertex in plyData.vertices) {
-      _positions.add(Vector3(
-        vertex.x.toDouble(),
-        vertex.y.toDouble(),
-        vertex.z.toDouble(),
-      ));
+    // Vertex layout: position (3 floats) + color (4 floats) = 7 floats per vertex
+    final vertexData = Float32List(_vertexCount * 7);
+    
+    double minX = double.infinity, maxX = -double.infinity;
+    double minY = double.infinity, maxY = -double.infinity;
+    double minZ = double.infinity, maxZ = -double.infinity;
+    
+    for (int i = 0; i < _vertexCount; i++) {
+      final vertex = plyData.vertices[i];
+      final baseIndex = i * 7;
       
+      // Position
+      vertexData[baseIndex] = vertex.x.toDouble();
+      vertexData[baseIndex + 1] = vertex.y.toDouble();
+      vertexData[baseIndex + 2] = vertex.z.toDouble();
+      
+      // Update bounding box
+      minX = minX < vertex.x ? minX : vertex.x;
+      maxX = maxX > vertex.x ? maxX : vertex.x;
+      minY = minY < vertex.y ? minY : vertex.y;
+      maxY = maxY > vertex.y ? maxY : vertex.y;
+      minZ = minZ < vertex.z ? minZ : vertex.z;
+      maxZ = maxZ > vertex.z ? maxZ : vertex.z;
+      
+      // Color
       if (vertex.red != null && vertex.green != null && vertex.blue != null) {
-        _colors.add(Color.fromARGB(
-          vertex.alpha ?? 255,
-          vertex.red!,
-          vertex.green!,
-          vertex.blue!,
-        ));
+        vertexData[baseIndex + 3] = vertex.red! / 255.0;
+        vertexData[baseIndex + 4] = vertex.green! / 255.0;
+        vertexData[baseIndex + 5] = vertex.blue! / 255.0;
+        vertexData[baseIndex + 6] = vertex.alpha != null ? vertex.alpha! / 255.0 : 1.0;
       } else {
-        _colors.add(Colors.white);
+        vertexData[baseIndex + 3] = 1.0;
+        vertexData[baseIndex + 4] = 1.0;
+        vertexData[baseIndex + 5] = 1.0;
+        vertexData[baseIndex + 6] = 1.0;
       }
     }
     
-    _computeBoundingBox(plyData.vertices);
-  }
-  
-  void _computeBoundingBox(List<PlyVertex> vertices) {
-    if (vertices.isEmpty) return;
+    // Compute bounding box center
+    _boundingBoxCenter = Vector3(
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2,
+    );
     
-    double minX = vertices.first.x;
-    double maxX = vertices.first.x;
-    double minY = vertices.first.y;
-    double maxY = vertices.first.y;
-    double minZ = vertices.first.z;
-    double maxZ = vertices.first.z;
-    
-    for (final vertex in vertices) {
-      minX = math.min(minX, vertex.x);
-      maxX = math.max(maxX, vertex.x);
-      minY = math.min(minY, vertex.y);
-      maxY = math.max(maxY, vertex.y);
-      minZ = math.min(minZ, vertex.z);
-      maxZ = math.max(maxZ, vertex.z);
-    }
-    
-    _boundingBoxMin = Vector3(minX, minY, minZ);
-    _boundingBoxMax = Vector3(maxX, maxY, maxZ);
-    _boundingBoxCenter = (_boundingBoxMin + _boundingBoxMax) * 0.5;
-    
-    final size = _boundingBoxMax - _boundingBoxMin;
-    final maxSize = math.max(math.max(size.x, size.y), size.z);
+    final sizeX = maxX - minX;
+    final sizeY = maxY - minY;
+    final sizeZ = maxZ - minZ;
+    final maxSize = [sizeX, sizeY, sizeZ].reduce((a, b) => a > b ? a : b);
     
     _cameraDistance = maxSize * 2.0;
+    
+    // Create vertex buffer
+    _vertexBuffer = _gpuContext!.createDeviceBufferWithCopy(
+      ByteData.view(vertexData.buffer),
+    );
     
     _viewMatrix = Matrix4.identity()
       ..translate(-_boundingBoxCenter.x, -_boundingBoxCenter.y, -_boundingBoxCenter.z);
@@ -97,101 +173,71 @@ class FlutterGpuPointCloudRenderer {
   }
   
   void render(Canvas canvas, Size size) {
-    if (_gpuContext == null || _positions.isEmpty) {
-      // Fallback to CPU rendering if GPU is not available
-      _renderCpu(canvas, size);
+    if (_gpuContext == null || _pipeline == null || _vertexBuffer == null || _vertexCount == 0) {
       return;
     }
     
-    // For now, use CPU rendering as Flutter GPU API is still evolving
-    // GPU rendering will be implemented when API stabilizes
-    _renderCpu(canvas, size);
-  }
-  
-  void _renderCpu(Canvas canvas, Size size) {
-    // Clear background
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..color = const Color.fromARGB(255, 26, 26, 38),
+    // Create render texture
+    final texture = _gpuContext!.createTexture(
+      gpu.StorageMode.devicePrivate,
+      size.width.toInt(),
+      size.height.toInt(),
     );
+    
+    if (texture == null) return;
     
     // Update matrices
     _updateMatrices(size);
     
-    // Create combined view-projection matrix
-    final cameraMatrix = Matrix4.identity()
-      ..translate(0.0, 0.0, -_cameraDistance)
-      ..rotateX(_cameraRotationX)
-      ..rotateY(_cameraRotationY);
+    // Create command buffer
+    final commandBuffer = _gpuContext!.createCommandBuffer();
     
-    final viewProjection = _projectionMatrix * cameraMatrix * _viewMatrix;
+    // Create color attachment
+    final colorAttachment = gpu.ColorAttachment(
+      texture: texture,
+      loadAction: gpu.LoadAction.clear,
+      storeAction: gpu.StoreAction.store,
+    );
+    colorAttachment.clearValue = Vector4(0.1, 0.1, 0.15, 1.0);
     
-    // Project and sort points by depth
-    final projectedPoints = <_ProjectedPoint>[];
+    // Create render target
+    final renderTarget = gpu.RenderTarget.singleColor(colorAttachment);
     
-    for (int i = 0; i < _positions.length; i++) {
-      final worldPos = Vector4(
-        _positions[i].x,
-        _positions[i].y,
-        _positions[i].z,
-        1.0,
-      );
-      
-      // Transform to clip space
-      final clipPos = viewProjection.transformed(worldPos);
-      
-      // Skip points behind camera
-      if (clipPos.w <= 0) continue;
-      
-      // Perspective divide
-      final ndcX = clipPos.x / clipPos.w;
-      final ndcY = clipPos.y / clipPos.w;
-      final ndcZ = clipPos.z / clipPos.w;
-      
-      // Skip points outside NDC
-      if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1 || ndcZ < -1 || ndcZ > 1) {
-        continue;
-      }
-      
-      // Convert to screen coordinates
-      final screenX = (ndcX + 1) * 0.5 * size.width;
-      final screenY = (1 - ndcY) * 0.5 * size.height;
-      
-      projectedPoints.add(_ProjectedPoint(
-        x: screenX,
-        y: screenY,
-        depth: clipPos.z,
-        color: _colors[i],
-        size: 3.0 / (clipPos.w * 0.5), // Adjust point size based on depth
-      ));
-    }
+    // Create render pass
+    final renderPass = commandBuffer.createRenderPass(renderTarget);
     
-    // Sort by depth (painter's algorithm)
-    projectedPoints.sort((a, b) => b.depth.compareTo(a.depth));
+    // Bind pipeline
+    renderPass.bindPipeline(_pipeline!);
+    
+    // Bind vertex buffer
+    renderPass.bindVertexBuffer(
+      gpu.BufferView(
+        _vertexBuffer!,
+        offsetInBytes: 0,
+        lengthInBytes: _vertexBuffer!.sizeInBytes,
+      ),
+      0,
+    );
+    
+    // Bind uniform buffer  
+    renderPass.bindVertexBuffer(
+      gpu.BufferView(
+        _uniformBuffer!,
+        offsetInBytes: 0,
+        lengthInBytes: _uniformBuffer!.sizeInBytes,
+      ),
+      1,
+    );
     
     // Draw points
-    final paint = Paint()
-      ..style = PaintingStyle.fill;
+    renderPass.draw();
     
-    for (final point in projectedPoints) {
-      paint.color = point.color;
-      canvas.drawCircle(
-        Offset(point.x, point.y),
-        point.size.clamp(0.5, 5.0),
-        paint,
-      );
-    }
+    // Submit command buffer
+    commandBuffer.submit();
     
-    // Draw info
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: 'Points: $_vertexCount (GPU Ready)',
-        style: const TextStyle(color: Colors.white70, fontSize: 12),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(canvas, const Offset(10, 10));
+    // Draw texture to canvas
+    final image = texture.asImage();
+    canvas.drawImage(image, Offset.zero, Paint());
   }
   
   void _updateMatrices(Size size) {
@@ -203,26 +249,24 @@ class FlutterGpuPointCloudRenderer {
       0.1,
       1000.0,
     );
+    
+    final cameraMatrix = Matrix4.identity()
+      ..translate(0.0, 0.0, -_cameraDistance)
+      ..rotateX(_cameraRotationX)
+      ..rotateY(_cameraRotationY);
+    
+    final viewProjection = _projectionMatrix * cameraMatrix * _viewMatrix;
+    
+    // Update uniform buffer with view-projection matrix
+    final uniformData = Float32List(16);
+    for (int i = 0; i < 16; i++) {
+      uniformData[i] = viewProjection[i];
+    }
+    
+    _uniformBuffer!.overwrite(ByteData.view(uniformData.buffer));
   }
   
   void dispose() {
-    _positions.clear();
-    _colors.clear();
+    // Resources will be garbage collected
   }
-}
-
-class _ProjectedPoint {
-  final double x;
-  final double y;
-  final double depth;
-  final Color color;
-  final double size;
-  
-  _ProjectedPoint({
-    required this.x,
-    required this.y,
-    required this.depth,
-    required this.color,
-    required this.size,
-  });
 }

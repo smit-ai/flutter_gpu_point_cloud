@@ -16,6 +16,7 @@ A Flutter application that parses and renders PLY point cloud files using Flutte
 
 - Flutter SDK master channel (managed via FVM)
 - Dart SDK
+- Run with `--enable-impeller` flag for GPU support
 
 ## Setup
 

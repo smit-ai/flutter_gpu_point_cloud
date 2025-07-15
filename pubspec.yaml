@@ -28,6 +28,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/shaders/
-  shaders:
-    - shaders/point_cloud.vert
-    - shaders/point_cloud.frag

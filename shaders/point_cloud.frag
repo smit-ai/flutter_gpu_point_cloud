@@ -1,14 +1,14 @@
 // Copyright 2024 Flutter Point Cloud Viewer Contributors
-#version 460 core
-
 #include <flutter/runtime_effect.glsl>
 
+in vec2 FlutterFragCoord;
 in vec4 fragColor;
 
-out vec4 outColor;
+out vec4 fragOutput;
 
 void main() {
-    vec2 coord = gl_PointCoord - vec2(0.5);
+    // Simple point rendering with fade at edges
+    vec2 coord = FlutterFragCoord - vec2(0.5);
     float dist = length(coord);
     
     if (dist > 0.5) {
@@ -16,5 +16,5 @@ void main() {
     }
     
     float alpha = 1.0 - smoothstep(0.4, 0.5, dist);
-    outColor = vec4(fragColor.rgb, fragColor.a * alpha);
+    fragOutput = vec4(fragColor.rgb, fragColor.a * alpha);
 }

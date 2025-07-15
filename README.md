@@ -13,7 +13,7 @@ A Flutter application that parses and renders PLY point cloud files using Canvas
 
 ## Requirements
 
-- Flutter SDK 3.24.0 (managed via FVM)
+- Flutter SDK 3.33.0-1.0.pre.947 (managed via FVM)
 - Dart SDK
 
 ## Setup

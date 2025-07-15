@@ -50,9 +50,13 @@ fvm flutter pub run build_runner build
 
 ## Usage
 
-1. Run the application:
+1. Run the application with GPU support:
 ```bash
-fvm flutter run
+# With Flutter GPU enabled
+fvm flutter run --enable-impeller
+
+# Or without FVM
+flutter run --enable-impeller
 ```
 
 2. Click "Load PLY File" to select a point cloud file

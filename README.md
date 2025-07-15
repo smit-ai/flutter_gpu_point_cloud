@@ -13,7 +13,7 @@ A Flutter application that parses and renders PLY point cloud files using Canvas
 
 ## Requirements
 
-- Flutter SDK 3.33.0-1.0.pre.947 (managed via FVM)
+- Flutter SDK master channel (managed via FVM)
 - Dart SDK
 
 ## Setup
@@ -29,8 +29,12 @@ cd flutter_gpu_point_cloud
 # Install FVM if not already installed
 dart pub global activate fvm
 
-# Install the Flutter version specified for this project
+# Install the Flutter version specified for this project (master channel)
 fvm install
+
+# Alternatively, for reproducible builds, use a specific commit:
+# cp .fvm/fvm_config_commit.json.example .fvm/fvm_config.json
+# fvm install
 
 # Use FVM's Flutter version
 fvm flutter --version

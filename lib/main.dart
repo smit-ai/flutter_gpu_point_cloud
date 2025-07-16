@@ -48,8 +48,8 @@ class _PointCloudViewerPageState extends State<PointCloudViewerPage> {
 
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['ply'],
+        /*type: FileType.custom,
+        allowedExtensions: ['ply'],*/
         withData: true,
       );
 

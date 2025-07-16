@@ -27,5 +27,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - shaders/  # - assets/shaders/
-    - shorebird.yaml
+    - shaders/
+    - shorebird.yaml # - assets/shaders/
